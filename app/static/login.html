@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in · Craftboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="panel center-card">
+    <div class="mark" aria-label="Craftboard" style="margin-bottom:18px"><i aria-hidden="true"><b></b><b></b><b></b></i>craftboard</div>
+    <div class="seg" role="group" aria-label="Choose" style="margin-bottom:18px">
+      <button id="mIn" aria-pressed="true">Sign in</button>
+      <button id="mUp" aria-pressed="false">Create account</button>
+    </div>
+    <form id="f" class="fields" novalidate>
+      <label class="f up hidden">Your name<input type="text" name="name" autocomplete="name"></label>
+      <label class="f up hidden"><span>Handle <span class="small muted">your intake link is /c/handle</span></span><input type="text" name="handle" autocomplete="username" placeholder="tamsin.draws"></label>
+      <label class="f">Email<input type="text" name="email" inputmode="email" autocomplete="email"></label>
+      <label class="f">Password<input type="password" name="password" autocomplete="current-password"></label>
+      <p class="err" id="err" role="alert"></p>
+      <button class="btn" id="go" type="submit">Sign in</button>
+    </form>
+    <p class="small muted" style="margin-top:16px">Run your commission business, not your DMs. Free for up to 3 active commissions, no cut of your sales.</p>
+  </div>
+</div>
+<script src="/static/ui.js"></script>
+<script>
+let mode = "in";
+function setMode(m) {
+  mode = m;
+  $("#mIn").setAttribute("aria-pressed", m === "in");
+  $("#mUp").setAttribute("aria-pressed", m === "up");
+  document.querySelectorAll(".up").forEach(el => el.classList.toggle("hidden", m !== "up"));
+  $("#go").textContent = m === "in" ? "Sign in" : "Create account";
+  document.querySelector("[name=password]").autocomplete = m === "in" ? "current-password" : "new-password";
+  $("#err").textContent = "";
+}
+$("#mIn").onclick = () => setMode("in");
+$("#mUp").onclick = () => setMode("up");
+if (location.hash === "#signup") setMode("up");
+$("#f").onsubmit = async e => {
+  e.preventDefault();
+  const fd = Object.fromEntries(new FormData(e.target));
+  const body = mode === "in" ? { email: fd.email, password: fd.password }
+                             : { email: fd.email, password: fd.password, name: fd.name, handle: fd.handle.replace(/^@/, "") };
+  if (mode === "up" && fd.password.length < 8) { $("#err").textContent = "Use at least 8 characters for your password."; return; }
+  $("#go").disabled = true;
+  try {
+    await api(mode === "in" ? "/api/auth/login" : "/api/auth/signup", { body, noRedirect: true });
+    location.href = "/app" + (mode === "up" ? "#settings" : "");
+  } catch (err) { $("#err").textContent = err.message; }
+  $("#go").disabled = false;
+};
+</script>
+</body>
+</html>

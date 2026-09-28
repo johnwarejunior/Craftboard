@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Request a commission</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="wrap">
+  <section class="hero" id="hero" style="margin-bottom:24px"></section>
+  <main id="main"><div class="empty">Loading…</div></main>
+  <p class="foot">Made with Craftboard · the back office for independent creatives</p>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/static/ui.js"></script>
+<script>
+const handle = decodeURIComponent(location.pathname.split("/")[2] || "");
+let P = null, timer = null;
+
+function priceFor(t, chars) {
+  const extra = Math.max(0, chars - t.characters_included);
+  return t.base_price_cents + Math.round(t.base_price_cents * t.extra_character_pct / 100 * extra);
+}
+function briefFromForm() {
+  const f = new FormData($("#reqForm"));
+  return {
+    description: (f.get("description") || "").trim() || " ",
+    characters: Math.max(1, parseInt(f.get("characters")) || 1),
+    background: f.get("background"),
+    usage: f.get("usage"),
+    deadline: (f.get("deadline") || "").trim(),
+    references: (f.get("references") || "").split(/\n+/).map(s => s.trim()).filter(Boolean).slice(0, 10),
+  };
+}
+function updatePrice() {
+  const t = P.types.find(x => x.id === +$("#type").value); if (!t) return;
+  const b = briefFromForm();
+  $("#price").innerHTML = `Estimated price <b>${money(priceFor(t, b.characters))}</b>${P.deposit_pct ? ` · ${P.deposit_pct}% deposit when accepted` : ""} · ${P.revisions_included} revision${P.revisions_included === 1 ? "" : "s"} included`;
+  $("#typeDesc").textContent = t.description || "";
+}
+async function screen() {
+  const b = briefFromForm();
+  if (b.description.trim().length < 3) { $("#screen").innerHTML = `<p class="small muted">As you write, we'll point out anything the artist will need to know.</p>`; return; }
+  try {
+    const s = await api(`/api/public/${encodeURIComponent(handle)}/screen`, { body: { type_id: +$("#type").value, brief: b } });
+    $("#screen").innerHTML = `<p class="small muted" style="margin-bottom:6px">Brief check</p>` +
+      flagList(s.flags, { vague: "Add detail", red: "Heads up", ok: "Looks good", info: "Scope" });
+  } catch (e) {}
+}
+function schedule() { updatePrice(); clearTimeout(timer); timer = setTimeout(screen, 400); }
+
+function render() {
+  const i = P.intake, first = esc(P.name.split(" ")[0]);
+  const free = i.slots - i.filled;
+  $("#hero").innerHTML = `<div>
+      <h1>Commission ${first}</h1>
+      <p class="sub">@${esc(P.handle)} takes ${i.slots} commission${i.slots === 1 ? "" : "s"} at a time. ${i.open ? (free > 0 ? `${free} slot${free === 1 ? "" : "s"} open right now.` : "Requests are open.") : i.waitlist_enabled ? "Slots are full. Join the waitlist and you'll hear first when one opens." : "Commissions are closed right now."}</p>
+      ${slotsHtml(i.filled, i.slots)}
+    </div>
+    <div class="hero-side">
+      <span class="status-pill ${i.open ? "open" : "closed"}">${i.open ? "Taking requests" : i.waitlist_enabled ? "Waitlist open" : "Closed"}</span>
+      ${i.waitlist_enabled ? `<div class="wl"><strong>${i.waitlist}</strong>on the waitlist</div>` : ""}
+    </div>`;
+  document.title = `Commission ${P.name}`;
+  if (!P.types.length || (!i.open && !i.waitlist_enabled)) {
+    $("#main").innerHTML = `<div class="empty">${esc(P.name)} isn't taking requests right now. Check back soon.</div>`; return;
+  }
+  $("#main").innerHTML = `<div class="grid2">
+    <section class="panel">
+      <div class="sectionhead"><h2>${i.open ? "Your request" : "Join the waitlist"}</h2></div>
+      ${P.message ? `<p class="muted pre" style="margin-bottom:14px">${esc(P.message)}</p>` : ""}
+      <form id="reqForm" class="fields" novalidate>
+        <div class="two">
+          <label class="f">Your handle<input type="text" name="client_handle" placeholder="@yourname" required></label>
+          <label class="f"><span>Email <span class="small muted">for updates</span></span><input type="email" name="email" placeholder="you@example.com"></label>
+        </div>
+        <label class="f">What you'd like<select id="type" name="type_id">${P.types.map(t => `<option value="${t.id}">${esc(t.name)} · from ${money(t.base_price_cents)}</option>`).join("")}</select></label>
+        <p class="small muted" id="typeDesc"></p>
+        <label class="f">Describe it<textarea name="description" rows="5" maxlength="4000" placeholder="Who's in it, pose, expression, outfit, colours, mood…"></textarea></label>
+        <div class="two">
+          <label class="f">Characters<input type="number" name="characters" min="1" max="20" value="1"></label>
+          <label class="f">Background<select name="background"><option>None</option><option>Simple</option><option>Detailed</option></select></label>
+        </div>
+        <div class="two">
+          <label class="f">Use<select name="usage"><option>Personal</option><option>Commercial</option></select></label>
+          <label class="f"><span>Needed by <span class="small muted">optional</span></span><input type="text" name="deadline" placeholder="e.g. June 20"></label>
+        </div>
+        <label class="f"><span>Reference links <span class="small muted">one per line</span></span><textarea name="references" rows="3" placeholder="https://…"></textarea></label>
+        <p class="small" id="price"></p>
+        <p class="err" id="err" role="alert"></p>
+        <button class="btn pink" type="submit">${i.open ? "Send request" : "Join the waitlist"}</button>
+      </form>
+    </section>
+    <aside>
+      <div class="panel" id="screen"></div>
+      <div class="panel" style="margin-top:16px">
+        <div class="sectionhead"><h2>How it works</h2></div>
+        <ul class="flags small">
+          <li><span>${first} reviews your request and replies with a link to your commission page.</span></li>
+          <li><span>When it's accepted, the brief locks${P.deposit_pct ? ` and a ${P.deposit_pct}% deposit holds your slot` : ""}.</span></li>
+          <li><span>You approve the work in progress or ask for changes. ${P.revisions_included} revision${P.revisions_included === 1 ? " is" : "s are"} included; bigger changes get a clear upgrade price.</span></li>
+          <li><span>Pay the balance and download your files.</span></li>
+        </ul>
+      </div>
+    </aside></div>`;
+  $("#reqForm").addEventListener("input", schedule);
+  $("#reqForm").addEventListener("submit", submit);
+  updatePrice(); screen();
+}
+async function submit(e) {
+  e.preventDefault();
+  const f = new FormData(e.target), b = briefFromForm();
+  const h = (f.get("client_handle") || "").trim();
+  if (!/^@?[A-Za-z0-9._-]{2,40}$/.test(h)) { $("#err").textContent = "Add your handle (letters, numbers, . _ -)."; return; }
+  if (b.description.trim().length < 3) { $("#err").textContent = "Describe what you'd like."; return; }
+  const btn = e.target.querySelector("button"); btn.disabled = true;
+  try {
+    const r = await api(`/api/public/${encodeURIComponent(handle)}/requests`,
+      { body: { client_handle: h, email: (f.get("email") || "").trim() || null, type_id: +f.get("type_id"), brief: b } });
+    $("#main").innerHTML = r.status === "waitlisted"
+      ? `<div class="empty"><p class="okbox" style="display:inline-block;margin-bottom:10px">You're #${r.position} on the waitlist</p><p class="muted">${esc(P.name)} will invite you when a slot opens.</p></div>`
+      : `<div class="empty"><p class="okbox" style="display:inline-block;margin-bottom:10px">Request sent</p><p class="muted">${esc(P.name)} will review it and send you a link to your commission page.</p></div>`;
+  } catch (err) { $("#err").textContent = err.message; btn.disabled = false; }
+}
+api(`/api/public/${encodeURIComponent(handle)}`, { noRedirect: true })
+  .then(p => { P = p; render(); })
+  .catch(e => { $("#hero").innerHTML = ""; $("#main").innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>

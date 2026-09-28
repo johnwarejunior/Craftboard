@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your commission</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="wrap">
+  <main id="main"><div class="empty">Loading…</div></main>
+  <p class="foot">Made with Craftboard · payments go straight to the artist</p>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/static/ui.js"></script>
+<script>
+const token = decodeURIComponent(location.pathname.split("/")[2] || "");
+const base = `/api/portal/${encodeURIComponent(token)}`;
+let C = null, lastResult = null;
+
+function payBox(kind, amount, text) {
+  const how = C.payment_mode === "stripe" ? "Pay by card" : C.payment_mode === "simulated" ? "Pay (test mode)" : null;
+  return `<div class="panel" style="border-color:var(--pink)">
+    <p style="margin-bottom:10px">${text}</p>
+    ${how ? `<button class="btn pink" data-action="pay" data-kind="${kind}">${how} · ${money(amount)}</button>`
+          : `<p class="small muted">Pay ${esc(C.creator.name)} directly; they'll mark it received.</p>`}
+    ${C.payment_mode === "simulated" ? `<p class="small muted" style="margin-top:8px">Stripe isn't configured on this server, so payments are simulated.</p>` : ""}
+  </div>`;
+}
+function stepBox() {
+  const who = esc(C.creator.name.split(" ")[0]);
+  switch (C.status) {
+    case "awaiting_deposit": return payBox("deposit", C.deposit_cents, `${who} accepted your request. Pay the deposit to hold your slot.`);
+    case "queued": return `<div class="panel"><p>You're in the queue. ${who} will share a work in progress for your review.</p></div>`;
+    case "in_progress": return `<div class="panel"><p>${who} is working on it${C.revisions_used ? " and applying your changes" : ""}. You'll review the next version here.</p></div>`;
+    case "in_review": {
+      const q = C.open_quote;
+      if (q) return `<div class="panel" style="border-color:var(--sun)">
+        <p style="margin-bottom:6px"><b>${q.kind === "paid_revision" ? "You've used your included revisions." : "That change goes beyond the locked brief."}</b></p>
+        <p class="small muted" style="margin-bottom:6px">"${esc(q.text)}"${q.reasons.length ? ` · ${esc(q.reasons.join(", "))}` : ""}</p>
+        <p style="margin-bottom:12px">${q.kind === "paid_revision" ? "An extra revision" : "The upgrade"} is <b>${money(q.quote_cents)}</b>, added to your balance.</p>
+        <div class="row-actions"><button class="btn" data-action="quote" data-id="${q.id}" data-v="accept">Accept ${money(q.quote_cents)}</button>
+        <button class="btn ghost" data-action="quote" data-id="${q.id}" data-v="decline">No thanks</button></div></div>`;
+      const left = C.revisions_included - C.revisions_used;
+      return `<div class="panel" style="border-color:var(--cobalt)">
+        <p style="margin-bottom:12px"><b>${who} shared a work in progress.</b> Approve it, or describe what you'd like changed. ${left > 0 ? `You have ${left} revision${left === 1 ? "" : "s"} left.` : "Further revisions are paid."}</p>
+        <label class="f">Changes<textarea id="changes" rows="3" placeholder="e.g. make the hair a bit darker"></textarea></label>
+        <div class="row-actions" style="margin-top:10px"><button class="btn" data-action="approve">Approve</button><button class="btn ghost" data-action="changes">Request changes</button></div>
+      </div>`;
+    }
+    case "approved": return `<div class="panel"><p>You approved it. ${who} is preparing the final files.</p></div>`;
+    case "delivered": return payBox("balance", C.balance_cents, `Your files are ready. Pay the ${money(C.balance_cents)} balance to download them.`);
+    case "completed": return `<div class="panel"><p class="okbox" style="margin-bottom:12px">All paid. Thank you!</p>
+      ${C.files.length ? `<ul class="files">${C.files.map(f => `<li><a href="${base}/files/${f.id}" download>${esc(f.filename)}</a> <span class="small muted">${Math.max(1, Math.round(f.size_bytes / 1024))} KB</span></li>`).join("")}</ul>` : `<p class="muted">No files were attached.</p>`}</div>`;
+  }
+  return "";
+}
+function render() {
+  const meta = `<dt>Type</dt><dd>${esc(C.type || "–")}</dd>`;
+  const paid = C.payments.filter(p => p.status === "paid").reduce((a, p) => a + p.amount_cents, 0);
+  const hist = C.revision_requests.filter(r => r.status !== "quoted").map(r => {
+    const label = r.kind === "revision" ? "Revision" : r.status === "accepted" ? "Upgrade" : "Declined";
+    return `<li class="${r.kind === "revision" ? "info" : r.status === "accepted" ? "red" : "vague"}"><b>${label}</b><span>${esc(r.text)}${r.quote_cents ? ` <span class="muted">(${money(r.quote_cents)})</span>` : ""}</span></li>`;
+  }).join("");
+  $("#main").innerHTML = `
+    <section class="hero" style="margin-bottom:18px"><div>
+      <p class="small muted" style="display:flex;gap:10px;align-items:center">${avatar(C.creator.handle)}<span>Commission by ${esc(C.creator.name)} (@${esc(C.creator.handle)})</span></p>
+      <h1 style="margin-top:10px">${esc(C.title)}</h1>
+    </div></section>
+    ${lastResult || ""}
+    ${timelineHtml(C.status)}
+    <div class="grid2" style="margin-top:18px">
+      <section>${stepBox()}
+        <div style="margin-top:16px">${briefHtml(C.brief, meta)}</div>
+      </section>
+      <aside class="panel">
+        <div class="sectionhead"><h2>Price</h2></div>
+        <dl class="kv">
+          <dt>Commission</dt><dd>${money(C.base_price_cents)}</dd>
+          ${C.upgrades_cents ? `<dt>Upgrades</dt><dd>${money(C.upgrades_cents)}</dd>` : ""}
+          <dt>Total</dt><dd>${money(C.price_cents)}</dd>
+          <dt>Paid</dt><dd>${money(paid)}</dd>
+        </dl>
+        <div class="divider"></div>
+        <p class="small" style="display:flex;gap:8px;align-items:center">Revisions ${revMeterHtml(C.revisions_used, C.revisions_included)} <span class="muted">${C.revisions_used} of ${C.revisions_included} used</span></p>
+        ${hist ? `<ul class="flags small" style="margin-top:10px">${hist}</ul>` : ""}
+      </aside>
+    </div>`;
+}
+async function load() { C = await api(base, { noRedirect: true }); render(); }
+
+document.addEventListener("click", async e => {
+  const el = e.target.closest("[data-action]"); if (!el) return;
+  e.preventDefault(); el.disabled = true;
+  try {
+    const a = el.dataset.action;
+    if (a === "pay") {
+      const r = await api(base + "/pay", { body: { kind: el.dataset.kind } });
+      if (r.checkout_url) { location.href = r.checkout_url; return; }
+      C = r.commission; lastResult = null; toast("Payment received"); render();
+    } else if (a === "approve") {
+      C = await api(base + "/approve", { method: "POST" }); lastResult = null; toast("Approved"); render();
+    } else if (a === "changes") {
+      const text = $("#changes").value.trim();
+      if (text.length < 2) { toast("Describe the change first."); el.disabled = false; return; }
+      const r = await api(base + "/changes", { body: { text } });
+      C = r.commission;
+      lastResult = r.result.kind === "revision"
+        ? `<p class="okbox" style="margin-bottom:14px">Sent as a revision. ${r.result.revisions_left_after} left after this one.</p>` : "";
+      render();
+    } else if (a === "quote") {
+      C = await api(`${base}/quotes/${el.dataset.id}/${el.dataset.v}`, { method: "POST" });
+      lastResult = null; toast(el.dataset.v === "accept" ? "Upgrade added to your balance" : "Quote declined. Approve the WIP or ask for a smaller change."); render();
+    }
+  } catch (err) { toast(err.message); el.disabled = false; }
+});
+
+const paidParam = new URLSearchParams(location.search).get("paid");
+load().then(() => {
+  if (paidParam) {
+    toast("Thanks! Confirming your payment…");
+    history.replaceState(null, "", location.pathname);
+    let n = 0; const iv = setInterval(async () => { n++; await load().catch(() => {}); if (n > 5) clearInterval(iv); }, 2000);
+  }
+}).catch(e => { $("#main").innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>

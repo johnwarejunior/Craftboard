@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Craftboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <div class="mark" aria-label="Craftboard"><i aria-hidden="true"><b></b><b></b><b></b></i>craftboard</div>
+    <span class="tag blue plan-badge" id="planBadge"></span>
+    <div class="spacer"></div>
+    <a class="linkbtn" id="intakeLink" target="_blank" rel="noopener">Your intake form</a>
+    <button class="linkbtn" id="logout">Sign out</button>
+  </header>
+  <section class="hero" id="hero"></section>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <main id="main"><div class="empty">Loading…</div></main>
+  <p class="foot">Craftboard MVP. Card payments run through your own Stripe account; Craftboard takes no cut.</p>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/static/ui.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
