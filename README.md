@@ -22,7 +22,7 @@ Everything below works end to end, and each item maps to a slide in the pitch.
 
 ## Quick start
 
-Requires Python 3.10+.
+Requires Python 3.12.
 
 ```bash
 cd craftboard-mvp/Craftboard
@@ -166,3 +166,14 @@ These are deliberate MVP cuts, roughly in the order the roadmap would take them:
 - **Scale-out.** SQLite with one connection per request suits a single server. Move to Postgres and object storage for files before running multiple instances.
 
 The interactive pitch demo (a separate single-page build with simulated data) is published alongside this MVP.
+
+## License
+
+Copyright (c) 2026 John Ware. All rights reserved.
+
+This source code is made publicly visible for viewing purposes only.
+No permission is granted to use, copy, modify, merge, publish, distribute,
+sublicense, or sell copies of this software, in whole or in part, without
+prior written permission from the copyright holder.
+
+For licensing inquiries, contact john@johnwarejunior.com.
